@@ -1,5 +1,6 @@
 import numpy as np
 from sklearn.linear_model import LogisticRegressionCV
+from sklearn import preprocessing
 
 class NeatObject(object):
     """docstring for NeatObject"""
@@ -25,18 +26,30 @@ class PCAModules(object):
         self.genes = {}
         self.ordered_pcs = {}
         self.weights = {}
+        self.label_encoder = preprocessing.LabelEncoder()
 
-    def fit(self, adata, obs_key="leiden", max_normalize=True, max_pcs=None):
+    def fit(self, adata, labels_key="leiden", max_normalize=True, max_pcs=None):
         """
         Fit the model to find the importance of every PC for each clister and 
         weights genes accordingly
         """
+        if labels_key in adata.obs:
+            labels = adata.obs[labels_key].values
+        elif labels_key in adata.obsm:
+            labels = adata.obsm[labels_key].values
+        elif labels_key in adata.uns:
+            labels = adata.uns[labels_key].values
+        else:
+            raise KeyError("Key %s not found in obs, obsm or uns" % labels_key)
+
+        self.label_encoder.fit(labels)
+
         stop = int(adata.obsm["X_pca"].shape[0] * 0.2)
         X_test = adata.obsm["X_pca"][:stop]
-        y_test = adata.obs[obs_key].values[:stop].astype('int32')
+        y_test = self.label_encoder.transform(labels[:stop])#.astype('int32')
 
         X_train = adata.obsm["X_pca"][stop:]
-        y_train = adata.obs[obs_key].values[stop:].astype('int32')
+        y_train = self.label_encoder.transform(labels[stop:])#.astype('int32')
 
         self.clf.fit(X_train, y_train)
         
