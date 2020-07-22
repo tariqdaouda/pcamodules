@@ -31,7 +31,7 @@ class PCAModules(object):
         Fit the model to find the importance of every PC for each clister and 
         weights genes accordingly
         """
-        stop = int(len(adata.X) * 0.2)
+        stop = int(adata.obsm["X_pca"].shape[0] * 0.2)
         X_test = adata.obsm["X_pca"][:stop]
         y_test = adata.obs[obs_key].values[:stop].astype('int32')
 
