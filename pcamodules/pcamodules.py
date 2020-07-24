@@ -24,9 +24,10 @@ class PCAModules(object):
         self.coefs = None
 
         self.genes = {}
-        self.ordered_pcs = {}
         self.weights = {}
         self.max_norm_weights = {}
+        self.global_max_norm_weights = {}
+        self.ordered_pcs = {}
         self.label_encoder = preprocessing.LabelEncoder()
 
     def fit(self, adata, labels_key="leiden", max_normalize=True, max_pcs=None):
@@ -61,33 +62,50 @@ class PCAModules(object):
 
         self.coefs = self.clf.coef_
     
-        for aidi in np.unique(y_test):
+        global_max = None
+        labels = np.unique(y_test)
+        for aidi in labels:
             self.ordered_pcs[aidi] = np.argsort(self.coefs[aidi])[::-1]
             pcs = None
             if max_pcs is not None :
                 pcs = self.ordered_pcs[aidi][:max_pcs]
             
             genes, weights, max_norm_weights = self._weight_genes(adata, self.coefs[aidi], pcs=pcs)
+            curr_max = np.max(weights)
+            if global_max is None or global_max < curr_max:
+                global_max = curr_max
+                print(aidi, global_max)
+
             self.genes[aidi] = genes
             self.weights[aidi] = weights
-            self.max_norm_weights = max_norm_weights
-            
+            self.max_norm_weights[aidi] = max_norm_weights
+
+        for aidi in labels:
+            self.global_max_norm_weights[aidi] = self.weights[aidi] / global_max
         return self
     
     def select(self, pattern="RP", exclude_genes=True, max_threshold=1, min_threshold=0.5):
         """Select only a subet of genes, returns a NeatObjet"""
         from collections import defaultdict
-        res_genes = defaultdict(list)
-        res_weights = defaultdict(list)
+        # res_genes = defaultdict(list)
+        # res_max_norm_weights = defaultdict(list)
+        # res_weights = defaultdict(list)
+        fields = ["genes", "weights", "max_norm_weights", "global_max_norm_weights"]
+        final_res = { k: defaultdict(list) for k in fields}
+
         for aidi in self.genes.keys():
-            for gene, weight in zip(self.genes[aidi], self.weights[aidi]):
+            for gene_id, (gene, weight) in enumerate( zip(self.genes[aidi], self.max_norm_weights[aidi]) ):
                 if self._select_gene(gene, weight, pattern=pattern, exclude_gene=exclude_genes) \
                     and self._filter_gene(gene, weight, min_threshold=min_threshold):
-                    
-                    res_genes[aidi].append(gene)
-                    res_weights[aidi].append(weight)
+                    for field in fields :
+                        final_res[field][aidi].append(
+                            getattr(self, field)[aidi][gene_id]
+                        )
+                    # res_genes[aidi].append(gene)
+                    # res_weights[aidi].append(weight)
 
-        return NeatObject(genes=res_genes, weights=res_weights)
+        # return NeatObject(genes=res_genes, weights=, max_norm_weights=res_weights)
+        return NeatObject(**final_res)
 
     def _weight_genes(self, adata, coef, pcs=None):
         if pcs is not None :
