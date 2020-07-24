@@ -26,6 +26,7 @@ class PCAModules(object):
         self.genes = {}
         self.ordered_pcs = {}
         self.weights = {}
+        self.max_norm_weights = {}
         self.label_encoder = preprocessing.LabelEncoder()
 
     def fit(self, adata, labels_key="leiden", max_normalize=True, max_pcs=None):
@@ -66,10 +67,11 @@ class PCAModules(object):
             if max_pcs is not None :
                 pcs = self.ordered_pcs[aidi][:max_pcs]
             
-            genes, weights = self._weight_genes(adata, self.coefs[aidi], max_normalize=max_normalize, pcs=pcs)
+            genes, weights, max_norm_weights = self._weight_genes(adata, self.coefs[aidi], pcs=pcs)
             self.genes[aidi] = genes
             self.weights[aidi] = weights
-
+            self.max_norm_weights = max_norm_weights
+            
         return self
     
     def select(self, pattern="RP", exclude_genes=True, max_threshold=1, min_threshold=0.5):
@@ -87,7 +89,7 @@ class PCAModules(object):
 
         return NeatObject(genes=res_genes, weights=res_weights)
 
-    def _weight_genes(self, adata, coef, max_normalize=True, pcs=None):
+    def _weight_genes(self, adata, coef, pcs=None):
         if pcs is not None :
             tmp_coef = np.zeros_like(coef)
             tmp_coef[pcs] = coef[pcs]
@@ -95,15 +97,14 @@ class PCAModules(object):
         loadings = adata.varm["PCs"] * coef
         weights = np.sum(loadings, axis = 1)
     
-        if max_normalize:
-            weights = weights / np.max(weights)
 
         genes = adata.var.index.values
         idx = weights.argsort()[::-1]
         
         genes, weights = genes[idx], weights[idx]
+        max_norm_weights = weights / np.max(weights)
         
-        return genes, weights
+        return genes, weights, max_norm_weights
     
     def _select_gene(self, gene, weight, pattern, exclude_gene=True):
         """
