@@ -2,7 +2,7 @@ import numpy as np
 from sklearn.linear_model import LogisticRegressionCV
 from sklearn import preprocessing
 
-class NeatObject(object):
+class NeatObject:
     """docstring for NeatObject"""
     def __init__(self, **kwargs):
         super(NeatObject, self).__init__()
@@ -30,7 +30,7 @@ class PCAModules(object):
         self.ordered_pcs = {}
         self.label_encoder = preprocessing.LabelEncoder()
 
-    def fit(self, adata, labels_key="leiden", max_normalize=True, max_pcs=None):
+    def fit(self, adata, labels_key="leiden", max_pcs=None):
         """
         Fit the model to find the importance of every PC for each clister and 
         weights genes accordingly
@@ -64,23 +64,22 @@ class PCAModules(object):
     
         global_max = None
         labels = np.unique(y_test)
-        for aidi in labels:
-            self.ordered_pcs[aidi] = np.argsort(self.coefs[aidi])[::-1]
+        for label, aidi in zip(labels, self.label_encoder.inverse_transform(labels)):
+            self.ordered_pcs[aidi] = np.argsort(self.coefs[label])[::-1]
             pcs = None
             if max_pcs is not None :
                 pcs = self.ordered_pcs[aidi][:max_pcs]
             
-            genes, weights, max_norm_weights = self._weight_genes(adata, self.coefs[aidi], pcs=pcs)
+            genes, weights, max_norm_weights = self._weight_genes(adata, self.coefs[label], pcs=pcs)
             curr_max = np.max(weights)
             if global_max is None or global_max < curr_max:
                 global_max = curr_max
-                print(aidi, global_max)
-
+            
             self.genes[aidi] = genes
             self.weights[aidi] = weights
             self.max_norm_weights[aidi] = max_norm_weights
 
-        for aidi in labels:
+        for aidi in self.label_encoder.inverse_transform(labels):
             self.global_max_norm_weights[aidi] = self.weights[aidi] / global_max
         return self
     
