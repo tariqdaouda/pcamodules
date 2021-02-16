@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn.linear_model import LogisticRegressionCV
 from sklearn import preprocessing
+from sklearn.decomposition import PCA
 
 class NeatObject:
     """docstring for NeatObject"""
@@ -30,7 +31,7 @@ class PCAModules(object):
         self.ordered_pcs = {}
         self.label_encoder = preprocessing.LabelEncoder()
 
-    def fit(self, adata, labels_key="leiden", max_pcs=None):
+    def fit(self, adata, fit_on=None, labels_key="leiden", max_pcs=None):
         """
         Fit the model to find the importance of every PC for each clister and 
         weights genes accordingly
@@ -46,11 +47,22 @@ class PCAModules(object):
 
         self.label_encoder.fit(labels)
 
-        stop = int(adata.obsm["X_pca"].shape[0] * 0.2)
-        X_test = adata.obsm["X_pca"][:stop]
+        if fit_on is None:
+           the_repr = adata.obsm["X_pca"]
+        else :
+            print("running pca...")
+            if max_pcs is None:
+                raise ValueError("With fit_on, max_pcs can't be None")
+            pca = PCA(n_components=max_pcs)
+            pca.fit(fit_on)
+            the_repr = pca.transform(fit_on)
+            print("\tdone.")
+
+        stop = int(the_repr.shape[0] * 0.2)
+        X_test = the_repr[:stop]
         y_test = self.label_encoder.transform(labels[:stop])#.astype('int32')
 
-        X_train = adata.obsm["X_pca"][stop:]
+        X_train = the_repr[stop:]
         y_train = self.label_encoder.transform(labels[stop:])#.astype('int32')
 
         self.clf.fit(X_train, y_train)
@@ -70,7 +82,12 @@ class PCAModules(object):
             if max_pcs is not None :
                 pcs = self.ordered_pcs[aidi][:max_pcs]
             
-            genes, weights, max_norm_weights = self._weight_genes(adata, self.coefs[label], pcs=pcs)
+            if fit_on is None:
+                PCs = adata.varm["PCs"]
+            else:
+                PCs = pca.components_.T
+
+            genes, weights, max_norm_weights = self._weight_genes(adata, PCs, self.coefs[label], pcs=pcs)
             curr_max = np.max(weights)
             if global_max is None or global_max < curr_max:
                 global_max = curr_max
@@ -106,12 +123,12 @@ class PCAModules(object):
         # return NeatObject(genes=res_genes, weights=, max_norm_weights=res_weights)
         return NeatObject(**final_res)
 
-    def _weight_genes(self, adata, coef, pcs=None):
+    def _weight_genes(self, adata, PCs, coef, pcs=None):
         if pcs is not None :
             tmp_coef = np.zeros_like(coef)
             tmp_coef[pcs] = coef[pcs]
             coef = tmp_coef
-        loadings = adata.varm["PCs"] * coef
+        loadings = PCs * coef
         weights = np.sum(loadings, axis = 1)
     
 
